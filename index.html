@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>現場打刻</title>
+    <style>
+        /* ベーススタイル（前回と同じ） */
+        body { font-family: sans-serif; margin: 0; padding: 20px; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box; text-align: center; }
+        .hidden { display: none !important; }
+        
+        /* 時計エリア */
+        #clock-area { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        #time { font-size: 20vw; font-weight: bold; line-height: 1; color: #333; }
+        #date { font-size: 1.5rem; color: #666; }
+
+        /* 操作エリア */
+        #action-area { flex: 1; display: flex; flex-direction: column; gap: 20px; justify-content: center; }
+        
+        /* ボタン共通 */
+        button { border: none; border-radius: 20px; width: 100%; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: transform 0.1s; }
+        button:active { transform: scale(0.96); }
+
+        /* 登録用スタイル */
+        .input-name { font-size: 1.5rem; padding: 15px; width: 80%; border-radius: 10px; border: 1px solid #ccc; text-align: center; margin-bottom: 20px; }
+        .btn-register { background: #333; color: white; height: 80px; font-size: 1.5rem; }
+
+        /* 打刻ボタン */
+        .btn-in { background: #00d26a; color: white; height: 120px; font-size: 3rem; }
+        .btn-out { background: #ff4b4b; color: white; height: 120px; font-size: 3rem; }
+
+        /* ステータス表示 */
+        #user-display { font-size: 1.2rem; font-weight: bold; color: #555; margin-bottom: 10px; }
+        #toast { visibility: hidden; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 10px 20px; border-radius: 30px; opacity: 0; transition: 0.3s; z-index: 99; }
+        #toast.show { visibility: visible; opacity: 1; top: 40px; }
+    </style>
+</head>
+<body>
+
+    <div id="toast">通知</div>
+
+    <div id="clock-area">
+        <div id="date">--/--</div>
+        <div id="time">00:00</div>
+    </div>
+
+    <div id="action-area">
+        
+        <div id="register-section">
+            <p>お名前を入力してください</p>
+            <input type="text" id="inputName" class="input-name" placeholder="例：田中 太郎">
+            <button class="btn-register" onclick="registerUser()">このスマホで登録</button>
+        </div>
+
+        <div id="main-section" class="hidden">
+            <div id="user-display">未設定</div>
+            <button class="btn-in" onclick="sendData('出勤')">出勤</button>
+            <button class="btn-out" onclick="sendData('退勤')">退勤</button>
+        </div>
+
+    </div>
+
+    <script>
+        // ★重要: ここに後で作成するGASのURLを貼る
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbyDv4ESlQTkjdxXH0IhstdPqADHa36179GR3bE1W32YnaYFQkAdh5nvHmxf87-BbgXY/exec"; 
+
+        // --- 1. 時計機能 ---
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('time').innerText = now.toLocaleTimeString('ja-JP', {hour: '2-digit', minute:'2-digit'});
+            document.getElementById('date').innerText = now.toLocaleDateString('ja-JP', {month: '2-digit', day:'2-digit', weekday: 'short'});
+        }, 1000);
+
+        // --- 2. 認証ロジック (UUID + LocalStorage) ---
+        
+        // UUID生成（ランダムな文字列）
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // 起動時にチェック
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedName = localStorage.getItem('timecard_name');
+            const savedUuid = localStorage.getItem('timecard_uuid');
+
+            if (savedName && savedUuid) {
+                showMain(savedName);
+            }
+        });
+
+        // ユーザー登録処理
+        function registerUser() {
+            const name = document.getElementById('inputName').value.trim();
+            if (!name) return showToast("名前を入力してください");
+
+            if (!confirm(`「${name}」さんとして登録します。\nこのスマホ以外からは打刻できなくなりますがよろしいですか？`)) return;
+
+            const uuid = generateUUID();
+            localStorage.setItem('timecard_name', name);
+            localStorage.setItem('timecard_uuid', uuid);
+            
+            showMain(name);
+            showToast("登録完了！");
+        }
+
+        function showMain(name) {
+            document.getElementById('register-section').classList.add('hidden');
+            document.getElementById('main-section').classList.remove('hidden');
+            document.getElementById('user-display').innerText = `${name} さん`;
+        }
+
+        // --- 3. 送信ロジック ---
+        function sendData(type) {
+            const name = localStorage.getItem('timecard_name');
+            const uuid = localStorage.getItem('timecard_uuid');
+
+            showToast("送信中...", true);
+            speak(`${type}、送信します`);
+
+            // 位置情報の取得（セキュリティのため必須）
+            navigator.geolocation.getCurrentPosition(pos => {
+                const data = {
+                    name: name,
+                    uuid: uuid, // ★ここでUUIDを送る！
+                    type: type,
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude
+                };
+
+                // GASへ送信
+                fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                })
+                .then(() => {
+                    showToast(`${type}完了しました`);
+                    speak(`${name}さん、${type}を受け付けました`);
+                })
+                .catch(err => {
+                    showToast("送信エラー");
+                    console.error(err);
+                });
+
+            }, err => {
+                showToast("位置情報を許可してください");
+                speak("位置情報をオンにしてください");
+            });
+        }
+
+        // --- 4. ユーティリティ ---
+        function showToast(msg, keep = false) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            if (!keep) setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const u = new SpeechSynthesisUtterance(text);
+                u.lang = 'ja-JP';
+                window.speechSynthesis.speak(u);
+            }
+        }
+    </script>
+</body>
+</html>
