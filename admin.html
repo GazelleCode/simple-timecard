@@ -67,7 +67,6 @@
                 // GASに「データください」とリクエスト
                 const res = await fetch(GAS_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         action: 'getLogs', // ★これで分岐させる
                         password: pass 
