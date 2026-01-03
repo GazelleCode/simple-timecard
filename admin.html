@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>勤怠管理パネル</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; background: #f4f4f4; }
+        h1 { border-bottom: 2px solid #333; padding-bottom: 10px; }
+        
+        /* ログインエリア */
+        #login-area { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+        input[type="password"] { padding: 10px; font-size: 1.2rem; width: 200px; margin-right: 10px; }
+        
+        /* データエリア */
+        #data-area { display: none; }
+        .controls { margin-bottom: 20px; display: flex; justify-content: space-between; }
+        
+        button { padding: 10px 20px; background: #333; color: white; border: none; cursor: pointer; font-size: 1rem; border-radius: 4px; }
+        button:hover { opacity: 0.8; }
+        button.download { background: #007bff; }
+
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #eee; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+    </style>
+</head>
+<body>
+
+    <h1>勤怠管理パネル</h1>
+
+    <div id="login-area">
+        <p>管理者パスワードを入力してください</p>
+        <input type="password" id="password" placeholder="Password">
+        <button onclick="fetchLogs()">ログインしてデータを取得</button>
+    </div>
+
+    <div id="data-area">
+        <div class="controls">
+            <div>
+                <strong>現在のステータス:</strong> 取得完了
+            </div>
+            <button class="download" onclick="downloadCSV()">CSVダウンロード</button>
+        </div>
+        <table id="log-table">
+            <thead>
+                </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        // ★index.htmlと同じGASのURLを貼る
+        const GAS_URL = "ここにGASのURLを貼り付け"; 
+        
+        let fetchedData = [];
+
+        async function fetchLogs() {
+            const pass = document.getElementById('password').value;
+            if(!pass) return alert("パスワードを入力してください");
+
+            document.querySelector('button').innerText = "取得中...";
+
+            try {
+                // GASに「データください」とリクエスト
+                const res = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'getLogs', // ★これで分岐させる
+                        password: pass 
+                    })
+                });
+
+                const json = await res.json();
+
+                if (json.error) {
+                    alert("エラー: " + json.error);
+                    document.querySelector('button').innerText = "ログインしてデータを取得";
+                } else {
+                    // 成功したら画面切り替え
+                    document.getElementById('login-area').style.display = 'none';
+                    document.getElementById('data-area').style.display = 'block';
+                    fetchedData = json.logs;
+                    renderTable(fetchedData);
+                }
+
+            } catch (e) {
+                alert("通信エラー");
+                console.error(e);
+            }
+        }
+
+        function renderTable(data) {
+            const thead = document.querySelector('#log-table thead');
+            const tbody = document.querySelector('#log-table tbody');
+            
+            // 1行目（ヘッダー）
+            let headerHtml = '<tr>';
+            data[0].forEach(col => headerHtml += `<th>${col}</th>`);
+            headerHtml += '</tr>';
+            thead.innerHTML = headerHtml;
+
+            // 2行目以降（データ）
+            let bodyHtml = '';
+            for (let i = 1; i < data.length; i++) {
+                bodyHtml += '<tr>';
+                data[i].forEach(col => bodyHtml += `<td>${col}</td>`);
+                bodyHtml += '</tr>';
+            }
+            tbody.innerHTML = bodyHtml;
+        }
+
+        function downloadCSV() {
+            if (fetchedData.length === 0) return;
+
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // BOM付きでExcel文字化け防止
+            
+            fetchedData.forEach(row => {
+                const rowStr = row.map(e => `"${e}"`).join(","); // ダブルクォートで囲む
+                csvContent += rowStr + "\r\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            
+            // ファイル名に日付をつける
+            const today = new Date().toISOString().slice(0,10);
+            link.setAttribute("download", `勤怠データ_${today}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
