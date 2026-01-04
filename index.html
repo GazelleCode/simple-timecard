@@ -5,63 +5,122 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>現場打刻</title>
     <style>
-        /* ベーススタイル（前回と同じ） */
-        body { font-family: sans-serif; margin: 0; padding: 20px; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box; text-align: center; }
+        /* --- ベース --- */
+        body { 
+            font-family: sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            box-sizing: border-box; 
+            text-align: center; 
+            transition: background-color 0.5s ease; /* 色がふわっと変わる */
+        }
+
+        /* --- 状態別のテーマカラー --- */
+        /* 退勤中（デフォルト）：グレー系 */
+        body.mode-stopped { background: #e0e4e8; color: #333; }
+        /* 勤務中：鮮やかなオレンジ系（緊張感を持たせる） */
+        body.mode-working { background: #fff3e0; color: #e65100; }
+
         .hidden { display: none !important; }
-        
-        /* 時計エリア */
+
+        /* --- 時計エリア --- */
         #clock-area { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-        #time { font-size: 20vw; font-weight: bold; line-height: 1; color: #333; }
-        #date { font-size: 1.5rem; color: #666; }
-
-        /* 操作エリア */
-        #action-area { flex: 1; display: flex; flex-direction: column; gap: 20px; justify-content: center; }
+        #time { font-size: 20vw; font-weight: bold; line-height: 1; margin-bottom: 10px; }
+        #date { font-size: 1.5rem; opacity: 0.8; }
         
-        /* ボタン共通 */
-        button { border: none; border-radius: 20px; width: 100%; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: transform 0.1s; }
-        button:active { transform: scale(0.96); }
+        /* 状態表示テキスト */
+        #status-text {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.5);
+        }
 
-        /* 登録用スタイル */
+        /* --- 操作エリア --- */
+        #action-area { flex: 1.5; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; }
+
+        /* --- 巨大なワンボタン --- */
+        #toggle-btn {
+            width: 80vw;
+            height: 80vw; /* 正円にする */
+            max-width: 300px;
+            max-height: 300px;
+            border-radius: 50%;
+            border: none;
+            font-size: 3rem;
+            font-weight: 900;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            transition: transform 0.1s, background 0.3s;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            line-height: 1.2;
+        }
+        #toggle-btn:active { transform: scale(0.95); }
+
+        /* ボタンの色：退勤中は「出勤する（緑）」 */
+        .btn-go { 
+            background: linear-gradient(135deg, #2af598 0%, #009efd 100%); 
+        }
+        /* ボタンの色：勤務中は「退勤する（赤）」 */
+        .btn-leave { 
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%);
+        }
+        
+        /* ボタン内のサブテキスト */
+        .btn-sub { font-size: 1.2rem; font-weight: normal; margin-top: 5px; opacity: 0.9; }
+
+        /* --- 登録画面 --- */
         .input-name { font-size: 1.5rem; padding: 15px; width: 80%; border-radius: 10px; border: 1px solid #ccc; text-align: center; margin-bottom: 20px; }
-        .btn-register { background: #333; color: white; height: 80px; font-size: 1.5rem; }
+        .btn-register { background: #333; color: white; height: 60px; width: 80%; border: none; border-radius: 30px; font-size: 1.2rem; font-weight: bold; }
 
-        /* 打刻ボタン */
-        .btn-in { background: #00d26a; color: white; height: 120px; font-size: 3rem; }
-        .btn-out { background: #ff4b4b; color: white; height: 120px; font-size: 3rem; }
+        /* --- トースト通知 --- */
+        #toast { visibility: hidden; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 15px 30px; border-radius: 50px; opacity: 0; transition: 0.3s; z-index: 99; font-weight: bold; width: max-content; }
+        #toast.show { visibility: visible; opacity: 1; top: 50px; }
 
-        /* ステータス表示 */
-        #user-display { font-size: 1.2rem; font-weight: bold; color: #555; margin-bottom: 10px; }
-        #toast { visibility: hidden; position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 10px 20px; border-radius: 30px; opacity: 0; transition: 0.3s; z-index: 99; }
-        #toast.show { visibility: visible; opacity: 1; top: 40px; }
+        /* ユーザー名表示 */
+        #user-display { position: absolute; top: 20px; left: 20px; font-size: 1rem; opacity: 0.7; font-weight: bold; }
     </style>
 </head>
-<body>
+<body class="mode-stopped">
 
     <div id="toast">通知</div>
+    <div id="user-display"></div>
 
     <div id="clock-area">
         <div id="date">--/--</div>
         <div id="time">00:00</div>
+        <div id="status-text">現在：退勤済</div>
     </div>
 
     <div id="action-area">
         
         <div id="register-section">
-            <p>お名前を入力してください</p>
+            <p style="font-size:1.2rem; font-weight:bold;">お名前を登録してください</p>
             <input type="text" id="inputName" class="input-name" placeholder="例：田中 太郎">
-            <button class="btn-register" onclick="registerUser()">このスマホで登録</button>
+            <button class="btn-register" onclick="registerUser()">このスマホを使う</button>
         </div>
 
         <div id="main-section" class="hidden">
-            <div id="user-display">未設定</div>
-            <button class="btn-in" onclick="sendData('出勤')">出勤</button>
-            <button class="btn-out" onclick="sendData('退勤')">退勤</button>
+            <button id="toggle-btn" class="btn-go" onclick="handleButtonClick()">
+                <span id="btn-main-text">出勤</span>
+                <span id="btn-sub-text" class="btn-sub">仕事をはじめます</span>
+            </button>
         </div>
 
     </div>
 
     <script>
-        // ★重要: ここに後で作成するGASのURLを貼る
+        // ★重要: GASのWeb app URLをここに貼る
         const GAS_URL = "https://script.google.com/macros/s/AKfycbzhvm7kvgLWYsGFEBuTvyXSMC0PXM-X7RrYwL2Ta__JHU-EsGTldCr04ZnKPb6VFgzL/exec"; 
 
         // --- 1. 時計機能 ---
@@ -71,37 +130,69 @@
             document.getElementById('date').innerText = now.toLocaleDateString('ja-JP', {month: '2-digit', day:'2-digit', weekday: 'short'});
         }, 1000);
 
-        // --- 2. 認証ロジック (UUID + LocalStorage) ---
-        
-        // UUID生成（ランダムな文字列）
-        function generateUUID() {
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-        }
-
-        // 起動時にチェック
+        // --- 2. 状態管理 & 初期化 ---
         document.addEventListener('DOMContentLoaded', () => {
             const savedName = localStorage.getItem('timecard_name');
             const savedUuid = localStorage.getItem('timecard_uuid');
 
             if (savedName && savedUuid) {
                 showMain(savedName);
+                updateUI(); // 画面の状態（色など）を復元
             }
         });
 
-        // ユーザー登録処理
+        // 現在「勤務中」かどうかを判定する関数
+        function isWorking() {
+            return localStorage.getItem('timecard_status') === 'working';
+        }
+
+        // 画面の見た目を更新する関数（超重要）
+        function updateUI() {
+            const body = document.body;
+            const statusText = document.getElementById('status-text');
+            const btn = document.getElementById('toggle-btn');
+            const btnMain = document.getElementById('btn-main-text');
+            const btnSub = document.getElementById('btn-sub-text');
+
+            if (isWorking()) {
+                // ★勤務中のデザイン
+                body.className = 'mode-working';
+                statusText.innerText = '現在：勤務中 👷';
+                
+                // ボタンは「退勤」用になる
+                btn.className = 'btn-leave';
+                btnMain.innerText = '退勤';
+                btnSub.innerText = 'お疲れ様でした';
+            } else {
+                // ★退勤済のデザイン
+                body.className = 'mode-stopped';
+                statusText.innerText = '現在：退勤済 🏠';
+                
+                // ボタンは「出勤」用になる
+                btn.className = 'btn-go';
+                btnMain.innerText = '出勤';
+                btnSub.innerText = '仕事をはじめます';
+            }
+        }
+
+        // --- 3. ユーザー登録 ---
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
         function registerUser() {
             const name = document.getElementById('inputName').value.trim();
             if (!name) return showToast("名前を入力してください");
-
-            if (!confirm(`「${name}」さんとして登録します。\nこのスマホ以外からは打刻できなくなりますがよろしいですか？`)) return;
+            if (!confirm(`「${name}」さんとして登録しますか？`)) return;
 
             const uuid = generateUUID();
             localStorage.setItem('timecard_name', name);
             localStorage.setItem('timecard_uuid', uuid);
-            
+            localStorage.setItem('timecard_status', 'stopped'); // 初期状態は「退勤」
+
             showMain(name);
             showToast("登録完了！");
         }
@@ -109,28 +200,42 @@
         function showMain(name) {
             document.getElementById('register-section').classList.add('hidden');
             document.getElementById('main-section').classList.remove('hidden');
-            document.getElementById('user-display').innerText = `${name} さん`;
+            document.getElementById('user-display').innerText = name + " さん";
+            updateUI();
         }
 
-        // --- 3. 送信ロジック ---
+        // --- 4. ボタンクリック時の処理 ---
+        function handleButtonClick() {
+            // 今の状態を見て、逆のアクションをする
+            if (isWorking()) {
+                sendData('退勤');
+            } else {
+                sendData('出勤');
+            }
+        }
+
+        // --- 5. データ送信 ---
         function sendData(type) {
             const name = localStorage.getItem('timecard_name');
             const uuid = localStorage.getItem('timecard_uuid');
 
             showToast("送信中...", true);
-            speak(`${type}、送信します`);
+            speak(type + "、送信します");
 
-            // 位置情報の取得（セキュリティのため必須）
+            // ボタンを一時的に無効化（連打防止）
+            const btn = document.getElementById('toggle-btn');
+            btn.disabled = true;
+            btn.style.opacity = 0.5;
+
             navigator.geolocation.getCurrentPosition(pos => {
                 const data = {
                     name: name,
-                    uuid: uuid, // ★ここでUUIDを送る！
+                    uuid: uuid,
                     type: type,
                     lat: pos.coords.latitude,
                     lon: pos.coords.longitude
                 };
 
-                // GASへ送信
                 fetch(GAS_URL, {
                     method: 'POST',
                     mode: 'no-cors',
@@ -138,21 +243,37 @@
                     body: JSON.stringify(data)
                 })
                 .then(() => {
-                    showToast(`${type}完了しました`);
-                    speak(`${name}さん、${type}を受け付けました`);
+                    // 送信成功したら状態を切り替える
+                    if (type === '出勤') {
+                        localStorage.setItem('timecard_status', 'working');
+                        speak(`おはようございます。${name}さん、出勤しました`);
+                    } else {
+                        localStorage.setItem('timecard_status', 'stopped');
+                        speak(`お疲れ様でした。${name}さん、退勤しました`);
+                    }
+                    
+                    updateUI(); // 画面更新
+                    showToast(`${type}完了`);
                 })
                 .catch(err => {
                     showToast("送信エラー");
-                    console.error(err);
+                    speak("エラーが発生しました");
+                })
+                .finally(() => {
+                    // ボタン復活
+                    btn.disabled = false;
+                    btn.style.opacity = 1;
                 });
 
             }, err => {
                 showToast("位置情報を許可してください");
-                speak("位置情報をオンにしてください");
+                speak("位置情報が必要です");
+                btn.disabled = false;
+                btn.style.opacity = 1;
             });
         }
 
-        // --- 4. ユーティリティ ---
+        // ユーティリティ
         function showToast(msg, keep = false) {
             const t = document.getElementById('toast');
             t.innerText = msg;
