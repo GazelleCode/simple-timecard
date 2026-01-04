@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤怠管理ダッシュボード</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* --- デザイン定義 --- */
         :root {
             --primary: #2c3e50;
-            --accent: #27ae60; /* 鮮やかな緑 */
+            --accent: #27ae60;
             --bg: #f4f7f6;
             --card-bg: #ffffff;
             --text: #333;
@@ -19,72 +19,69 @@
 
         /* ヘッダー */
         header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #ddd; }
+        .header-left { display: flex; align-items: center; gap: 15px; }
         h1 { margin: 0; font-size: 1.5rem; color: var(--primary); }
-
-        /* ログイン画面 */
-        #login-area { background: var(--card-bg); padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; max-width: 400px; margin: 100px auto; }
-        input, select { padding: 10px; font-size: 1rem; border: 1px solid #ccc; border-radius: 4px; margin: 5px 0; }
-        button { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: 0.2s; }
-        button:hover { opacity: 0.9; }
-
-        /* ダッシュボード本体 */
-        #dashboard { display: none; }
-
-        /* セクション共通 */
-        .section { background: var(--card-bg); border-radius: 8px; padding: 20px; margin-bottom: 30px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .section-header { font-size: 1.2rem; font-weight: bold; margin-bottom: 15px; border-left: 5px solid var(--primary); padding-left: 10px; display: flex; align-items: center; justify-content: space-between; }
-
-        /* 1. リアルタイム在席ボード */
-        .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
-        .status-card { 
-            padding: 20px; border-radius: 8px; text-align: center; border: 2px solid #eee; transition: 0.2s;
-            background: #fafafa;
-        }
-        /* 出勤中のスタイル */
-        .status-card.active { 
-            background: #e8f5e9; /* 薄い緑背景 */
-            border-color: var(--accent); 
-            box-shadow: 0 4px 8px rgba(39, 174, 96, 0.2);
-            transform: translateY(-2px);
-        }
-        .status-name { font-size: 1.3rem; font-weight: bold; margin-bottom: 5px; }
-        .status-badge { 
-            display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: bold; 
-            background: #ccc; color: #666;
-        }
-        .status-card.active .status-badge { background: var(--accent); color: white; }
-        .status-time { font-size: 0.8rem; color: #888; margin-top: 8px; }
-
-        /* 2. 月次レポートエリア */
-        .filter-bar { display: flex; gap: 15px; align-items: center; background: #eee; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; }
-        .filter-bar label { font-weight: bold; font-size: 0.9rem; }
         
-        /* 勤怠テーブル */
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        /* ボタン群 */
+        .btn-group { display: flex; gap: 10px; }
+        button { border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: 0.2s; color: white; display: flex; align-items: center; gap: 5px; }
+        button:hover { opacity: 0.9; }
+        .btn-refresh { background: var(--primary); }
+        .btn-dl { background: #2980b9; }
+
+        /* ログインエリア */
+        #login-area { background: var(--card-bg); padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; max-width: 400px; margin: 80px auto; }
+        input, select { padding: 10px; font-size: 1rem; border: 1px solid #ccc; border-radius: 4px; margin: 5px 0; }
+        
+        /* ダッシュボード */
+        #dashboard { display: none; }
+        .section { background: var(--card-bg); border-radius: 8px; padding: 20px; margin-bottom: 30px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .section-header { font-size: 1.2rem; font-weight: bold; margin-bottom: 15px; border-left: 5px solid var(--primary); padding-left: 10px; display: flex; justify-content: space-between; align-items: center; }
+
+        /* 1. 在席ボード */
+        .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
+        .status-card { padding: 15px; border-radius: 8px; text-align: center; border: 2px solid #eee; background: #fafafa; }
+        .status-card.active { background: #e8f5e9; border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 8px rgba(39, 174, 96, 0.2); }
+        .status-name { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; }
+        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; background: #ccc; color: #666; }
+        .status-card.active .status-badge { background: var(--accent); color: white; }
+        .status-time { font-size: 0.8rem; color: #888; margin-top: 5px; }
+
+        /* 2. レポート */
+        .filter-bar { display: flex; gap: 15px; align-items: center; background: #eee; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+        
+        /* グラフエリア */
+        .chart-container { height: 300px; margin-bottom: 20px; display: none; } /* 初期は非表示 */
+
+        /* テーブル */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95rem; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background: #f8f9fa; color: var(--primary); }
         tr:hover { background: #f1f1f1; }
         .total-row { font-weight: bold; background: #eef; }
 
-        /* ユーティリティ */
         .loading { display: none; color: #666; margin-top: 10px; }
-        .btn-dl { background: #2980b9; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
     <div class="container">
         <header>
-            <h1>勤怠管理ダッシュボード</h1>
-            <button class="btn-dl" onclick="downloadCSV()" id="dl-btn" style="display:none;">全データCSV出力</button>
+            <div class="header-left">
+                <h1>勤怠ダッシュボード</h1>
+            </div>
+            <div class="btn-group" id="header-buttons" style="display:none;">
+                <button class="btn-refresh" onclick="fetchData()">🔄 最新情報に更新</button>
+                <button class="btn-dl" onclick="downloadCSV()">📥 CSV出力</button>
+            </div>
         </header>
 
         <div id="login-area">
             <h2>管理者ログイン</h2>
             <input type="password" id="password" placeholder="パスワード">
             <br>
-            <button onclick="fetchData()">データ取得</button>
-            <div id="loading" class="loading">取得中...</div>
+            <button class="btn-refresh" onclick="fetchData()">ログイン</button>
+            <div id="loading" class="loading">データ取得中...</div>
         </div>
 
         <div id="dashboard">
@@ -92,14 +89,13 @@
             <div class="section">
                 <div class="section-header">
                     現在の出勤状況
-                    <span style="font-size:0.8rem; font-weight:normal; color:#666;">(最終更新: <span id="last-update">-</span>)</span>
+                    <small style="font-size:0.8rem; font-weight:normal; color:#666;">最終更新: <span id="last-update">-</span></small>
                 </div>
-                <div id="status-grid" class="status-grid">
-                    </div>
+                <div id="status-grid" class="status-grid"></div>
             </div>
 
             <div class="section">
-                <div class="section-header">月別・個人別 勤務表</div>
+                <div class="section-header">月別・個人別レポート</div>
                 
                 <div class="filter-bar">
                     <div>
@@ -109,31 +105,31 @@
                     <div>
                         <label>氏名: </label>
                         <select id="user-picker" onchange="renderReport()">
-                            <option value="all">全員表示</option>
+                            <option value="all">全員表示（ログ）</option>
                         </select>
                     </div>
                 </div>
 
-                <div id="report-container">
-                    <p style="color:#888;">月と氏名を選択すると、ここに勤務表が表示されます。</p>
+                <div id="chart-wrapper" class="chart-container">
+                    <canvas id="workChart"></canvas>
                 </div>
+
+                <div id="report-container"></div>
             </div>
 
         </div>
     </div>
 
     <script>
-        // ★新しいGAS URLに書き換えてください
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbzhvm7kvgLWYsGFEBuTvyXSMC0PXM-X7RrYwL2Ta__JHU-EsGTldCr04ZnKPb6VFgzL/exec"; 
+        // ★GASのWeb app URL（前と同じもの）
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbyDv4ESlQTkjdxXH0IhstdPqADHa36179GR3bE1W32YnaYFQkAdh5nvHmxf87-BbgXY/exec"; 
 
-        let rawLogs = []; // 全生データ
+        let rawLogs = []; 
+        let myChart = null; // グラフインスタンス保持用
 
-        // 初期化：今月を選択状態にする
         window.onload = () => {
             const now = new Date();
-            const yyyy = now.getFullYear();
-            const mm = String(now.getMonth() + 1).padStart(2, '0');
-            document.getElementById('month-picker').value = `${yyyy}-${mm}`;
+            document.getElementById('month-picker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
         };
 
         async function fetchData() {
@@ -141,6 +137,10 @@
             if(!pass) return alert("パスワードを入力してください");
 
             document.getElementById('loading').style.display = 'block';
+            
+            // ボタンを一時的に無効化（連打防止）
+            const btns = document.querySelectorAll('button');
+            btns.forEach(b => b.disabled = true);
 
             try {
                 const res = await fetch(GAS_URL, {
@@ -152,14 +152,11 @@
                 if (json.error) {
                     alert("エラー: " + json.error);
                 } else {
-                    // データ整形: ヘッダー(1行目)を除外してオブジェクト化
                     rawLogs = json.logs.slice(1).map(row => ({
                         time: new Date(row[0]),
                         name: row[1],
                         type: row[2]
                     }));
-                    
-                    // 日付順にソート
                     rawLogs.sort((a, b) => a.time - b.time);
                     
                     initDashboard();
@@ -168,13 +165,14 @@
                 alert("通信エラー"); console.error(e);
             } finally {
                 document.getElementById('loading').style.display = 'none';
+                btns.forEach(b => b.disabled = false);
             }
         }
 
         function initDashboard() {
             document.getElementById('login-area').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
-            document.getElementById('dl-btn').style.display = 'block';
+            document.getElementById('header-buttons').style.display = 'flex';
             document.getElementById('last-update').innerText = new Date().toLocaleTimeString();
 
             updateUserList();
@@ -182,176 +180,202 @@
             renderReport();
         }
 
-        // --- 1. 現在状況ボード描画 ---
+        // --- 1. 在席ボード ---
         function renderStatusBoard() {
             const userStatus = {}; 
-            // ログを最初から最後まで走査して「最終状態」を決定する
             rawLogs.forEach(log => {
                 userStatus[log.name] = { type: log.type, time: log.time };
             });
-
             const grid = document.getElementById('status-grid');
             grid.innerHTML = "";
-
             Object.keys(userStatus).forEach(name => {
                 const s = userStatus[name];
                 const isWorking = (s.type === '出勤');
                 const timeStr = s.time.getHours().toString().padStart(2,'0') + ":" + s.time.getMinutes().toString().padStart(2,'0');
-
                 const div = document.createElement('div');
                 div.className = `status-card ${isWorking ? 'active' : ''}`;
-                div.innerHTML = `
-                    <div class="status-name">${name}</div>
-                    <div class="status-badge">${isWorking ? '勤務中' : '退勤済'}</div>
-                    <div class="status-time">Last: ${timeStr}</div>
-                `;
+                div.innerHTML = `<div class="status-name">${name}</div><div class="status-badge">${isWorking ? '勤務中' : '退勤済'}</div><div class="status-time">Last: ${timeStr}</div>`;
                 grid.appendChild(div);
             });
         }
 
-        // --- 2. ユーザー選択リスト更新 ---
+        // --- 2. リスト更新 ---
         function updateUserList() {
+            const currentVal = document.getElementById('user-picker').value;
             const users = [...new Set(rawLogs.map(l => l.name))];
             const select = document.getElementById('user-picker');
-            // 一旦リセット
-            select.innerHTML = '<option value="all">全員表示（日別合計）</option>';
+            select.innerHTML = '<option value="all">全員表示（ログ）</option>';
             users.forEach(u => {
                 const opt = document.createElement('option');
-                opt.value = u;
-                opt.innerText = u;
+                opt.value = u; opt.innerText = u;
                 select.appendChild(opt);
             });
+            select.value = currentVal; // 選択状態を維持
         }
 
-        // --- 3. レポート生成ロジック ---
+        // --- 3. レポート描画 ---
         function renderReport() {
-            const selectedMonth = document.getElementById('month-picker').value; // "2024-01"
+            const selectedMonth = document.getElementById('month-picker').value;
             const selectedUser = document.getElementById('user-picker').value;
             const container = document.getElementById('report-container');
+            const chartWrapper = document.getElementById('chart-wrapper');
 
             if (!selectedMonth) return;
-
-            // 対象月のデータのみフィルタリング
             const [year, month] = selectedMonth.split('-');
-            const filteredLogs = rawLogs.filter(l => 
-                l.time.getFullYear() == year && 
-                (l.time.getMonth() + 1) == month
-            );
+            const filteredLogs = rawLogs.filter(l => l.time.getFullYear() == year && (l.time.getMonth()+1) == month);
 
             if (filteredLogs.length === 0) {
                 container.innerHTML = "<p>データがありません</p>";
+                chartWrapper.style.display = "none";
                 return;
             }
 
-            // A. 「全員表示」の場合 -> 日別の出勤人数サマリなどを出すのが普通だが、今回はシンプルにリスト表示
-            // B. 「個人」を選択した場合 -> タイムカード形式（日付 | 開始 | 終了 | 時間）
-            
             if (selectedUser !== 'all') {
-                renderPersonalTable(filteredLogs, selectedUser, container);
+                // 個人モード：グラフとテーブルを表示
+                chartWrapper.style.display = "block";
+                const myLogs = filteredLogs.filter(l => l.name === selectedUser);
+                const dailyData = calcDailyWork(myLogs);
+                
+                drawChart(dailyData, selectedUser); // ★グラフ描画
+                renderPersonalTable(dailyData, selectedUser, container); // テーブル描画
             } else {
+                // 全員モード：テーブルのみ
+                chartWrapper.style.display = "none";
                 renderAllTable(filteredLogs, container);
             }
         }
 
-        // 個人用タイムカード描画
-        function renderPersonalTable(logs, name, container) {
-            const myLogs = logs.filter(l => l.name === name);
-            if (myLogs.length === 0) {
-                container.innerHTML = "<p>この月の勤務記録はありません</p>";
-                return;
-            }
-
-            // 日ごとにグルーピングして計算
-            // 単純化のため、「その日の最初の出勤」と「その日の最後の退勤」で計算するロジックにします
-            // ※中抜け対応などは複雑になるため
-            const dailyData = {};
-            
-            myLogs.forEach(log => {
-                const day = log.time.getDate();
-                if (!dailyData[day]) dailyData[day] = { start: null, end: null };
-                
-                if (log.type === '出勤') {
-                    if (!dailyData[day].start) dailyData[day].start = log.time;
-                } else if (log.type === '退勤') {
-                    dailyData[day].end = log.time;
-                }
-            });
-
-            let html = `<h3>${name} さんの勤務表</h3>
-                        <table>
-                        <thead><tr><th>日付</th><th>出勤時刻</th><th>退勤時刻</th><th>実働時間</th></tr></thead>
-                        <tbody>`;
-            
-            let totalHours = 0;
-
-            // 1日から31日までループ（あるいはデータがある日だけ）
-            Object.keys(dailyData).sort((a,b)=>a-b).forEach(day => {
-                const d = dailyData[day];
-                let startStr = "-";
-                let endStr = "-";
-                let durationStr = "-";
-                
-                if (d.start) startStr = formatTime(d.start);
-                if (d.end) endStr = formatTime(d.end);
-
-                if (d.start && d.end) {
-                    const diffMs = d.end - d.start;
-                    const hours = diffMs / (1000 * 60 * 60); // 時間換算
-                    totalHours += hours;
-                    const h = Math.floor(hours);
-                    const m = Math.round((hours - h) * 60);
-                    durationStr = `${h}時間 ${m}分`;
-                } else if (d.start && !d.end) {
-                     durationStr = "勤務中(？)";
-                }
-
-                html += `<tr>
-                            <td>${monthFormat(d.start || d.end)}</td>
-                            <td>${startStr}</td>
-                            <td>${endStr}</td>
-                            <td>${durationStr}</td>
-                         </tr>`;
-            });
-
-            html += `<tr class="total-row"><td colspan="3">月間合計</td><td>${totalHours.toFixed(1)} 時間</td></tr>`;
-            html += "</tbody></table>";
-            container.innerHTML = html;
-        }
-
-        // 全員表示用（単純なログ羅列）
-        function renderAllTable(logs, container) {
-            let html = `<h3>全体ログ（日時順）</h3>
-                        <table><thead><tr><th>日時</th><th>氏名</th><th>種別</th></tr></thead><tbody>`;
-            
+        // 勤務時間計算ロジック
+        function calcDailyWork(logs) {
+            const daily = {};
+            // 日毎に初期化
             logs.forEach(l => {
-                html += `<tr>
-                    <td>${l.time.toLocaleString()}</td>
-                    <td>${l.name}</td>
-                    <td>${l.type === '出勤' ? '<b style="color:green">出勤</b>' : '退勤'}</td>
-                </tr>`;
+                const d = l.time.getDate();
+                if(!daily[d]) daily[d] = { date: l.time, start: null, end: null, ranges: [] };
+                
+                // 簡易ロジック: その日の「最初の出勤」と「最後の退勤」
+                // ※ガントチャート用に開始/終了のペアも記録可能だが、今回はシンプルに
+                if(l.type === '出勤' && !daily[d].start) daily[d].start = l.time;
+                if(l.type === '退勤') daily[d].end = l.time;
+            });
+            return daily;
+        }
+
+        // ★グラフ描画関数
+        function drawChart(dailyData, name) {
+            const ctx = document.getElementById('workChart').getContext('2d');
+            
+            // 既存グラフがあれば破棄
+            if (myChart) myChart.destroy();
+
+            // データ整形
+            const labels = [];
+            const dataStart = [];
+            const dataEnd = [];
+
+            // 1日〜31日までループ
+            const days = Object.keys(dailyData).sort((a,b)=>Number(a)-Number(b));
+            
+            // Floating Bar用データ作成 [{x: 日付, y: [開始時, 終了時]}, ...]
+            const plotData = [];
+
+            days.forEach(day => {
+                const d = dailyData[day];
+                if (d.start && d.end) {
+                    const startH = d.start.getHours() + d.start.getMinutes()/60;
+                    const endH = d.end.getHours() + d.end.getMinutes()/60;
+                    plotData.push({
+                        x: day + "日",
+                        y: [startH, endH]
+                    });
+                }
+            });
+
+            myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: plotData.map(d => d.x),
+                    datasets: [{
+                        label: '勤務時間帯',
+                        data: plotData,
+                        backgroundColor: 'rgba(39, 174, 96, 0.6)',
+                        borderColor: 'rgba(39, 174, 96, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y', // 横向きグラフ
+                    scales: {
+                        x: {
+                            min: 0, max: 24,
+                            title: { display: true, text: '時刻 (0時 - 24時)' },
+                            ticks: { stepSize: 2 }
+                        }
+                    },
+                    plugins: {
+                        title: { display: true, text: `${name}さんの勤務グラフ` },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const st = ctx.raw.y[0];
+                                    const en = ctx.raw.y[1];
+                                    const toTime = (h) => Math.floor(h) + ":" + Math.round((h%1)*60).toString().padStart(2,'0');
+                                    return `${toTime(st)} 〜 ${toTime(en)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 個人テーブル描画
+        function renderPersonalTable(dailyData, name, container) {
+            let html = `<h3>詳細データ</h3><table><thead><tr><th>日付</th><th>出勤</th><th>退勤</th><th>実働</th></tr></thead><tbody>`;
+            let total = 0;
+            
+            Object.keys(dailyData).sort((a,b)=>Number(a)-Number(b)).forEach(day => {
+                const d = dailyData[day];
+                let s = "-", e = "-", dur = "-";
+                
+                if (d.start) s = formatTime(d.start);
+                if (d.end) e = formatTime(d.end);
+                
+                if (d.start && d.end) {
+                    const diff = (d.end - d.start) / (1000*60*60);
+                    total += diff;
+                    const h = Math.floor(diff);
+                    const m = Math.round((diff-h)*60);
+                    dur = `${h}時間 ${m}分`;
+                }
+
+                html += `<tr><td>${day}日</td><td>${s}</td><td>${e}</td><td>${dur}</td></tr>`;
+            });
+            
+            html += `<tr class="total-row"><td colspan="3">合計</td><td>${total.toFixed(1)} 時間</td></tr></tbody></table>`;
+            container.innerHTML = html;
+        }
+
+        function renderAllTable(logs, container) {
+            let html = `<table><thead><tr><th>日時</th><th>氏名</th><th>種別</th></tr></thead><tbody>`;
+            logs.forEach(l => {
+                html += `<tr><td>${l.time.toLocaleString()}</td><td>${l.name}</td><td>${l.type}</td></tr>`;
             });
             html += "</tbody></table>";
             container.innerHTML = html;
         }
 
-        function formatTime(date) {
-            return date.getHours().toString().padStart(2,'0') + ":" + date.getMinutes().toString().padStart(2,'0');
-        }
-        function monthFormat(date) {
-            if(!date) return "";
-            return (date.getMonth()+1) + "/" + date.getDate();
-        }
-
+        function formatTime(d) { return d.getHours().toString().padStart(2,'0') + ":" + d.getMinutes().toString().padStart(2,'0'); }
+        
         function downloadCSV() {
-            // 前述のCSVロジックと同じ
             let csv = "data:text/csv;charset=utf-8,\uFEFF日時,氏名,種別\n";
-            rawLogs.forEach(row => {
-                csv += `"${row.time.toLocaleString()}","${row.name}","${row.type}"\n`;
-            });
-            const link = document.createElement("a");
-            link.href = encodeURI(csv);
-            link.download = "timecard_all.csv";
-            link.click();
+            rawLogs.forEach(r => csv += `"${r.time.toLocaleString()}","${r.name}","${r.type}"\n`);
+            const a = document.createElement("a");
+            a.href = encodeURI(csv); a.download = "timecard.csv"; a.click();
         }
     </script>
 </body>
