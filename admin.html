@@ -26,6 +26,7 @@
         .btn-group { display: flex; gap: 10px; }
         button { border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: 0.2s; color: white; display: flex; align-items: center; gap: 5px; }
         button:hover { opacity: 0.9; }
+        button:disabled { background: #ccc !important; cursor: not-allowed; }
         .btn-refresh { background: var(--primary); }
         .btn-dl { background: #2980b9; }
 
@@ -60,10 +61,14 @@
         tr:hover { background: #f1f1f1; }
         .total-row { font-weight: bold; background: #eef; }
 
-        .loading { display: none; color: #666; margin-top: 10px; }
+        /* 通知トースト */
+        #toast { visibility: hidden; position: fixed; top: 20px; right: 20px; background: #333; color: white; padding: 15px 25px; border-radius: 8px; opacity: 0; transition: 0.3s; z-index: 100; font-weight: bold; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        #toast.show { visibility: visible; opacity: 1; top: 30px; }
     </style>
 </head>
 <body>
+
+    <div id="toast">更新完了</div>
 
     <div class="container">
         <header>
@@ -71,7 +76,7 @@
                 <h1>勤怠ダッシュボード</h1>
             </div>
             <div class="btn-group" id="header-buttons" style="display:none;">
-                <button class="btn-refresh" onclick="fetchData()">🔄 最新情報に更新</button>
+                <button class="btn-refresh" onclick="refreshData()">🔄 最新情報に更新</button>
                 <button class="btn-dl" onclick="downloadCSV()">📥 CSV出力</button>
             </div>
         </header>
@@ -80,8 +85,7 @@
             <h2>管理者ログイン</h2>
             <input type="password" id="password" placeholder="パスワード">
             <br>
-            <button class="btn-refresh" onclick="fetchData()">ログイン</button>
-            <div id="loading" class="loading">データ取得中...</div>
+            <button class="btn-refresh" onclick="initialLogin()">ログイン</button>
         </div>
 
         <div id="dashboard">
@@ -125,33 +129,50 @@
         const GAS_URL = "https://script.google.com/macros/s/AKfycbzhvm7kvgLWYsGFEBuTvyXSMC0PXM-X7RrYwL2Ta__JHU-EsGTldCr04ZnKPb6VFgzL/exec"; 
 
         let rawLogs = []; 
-        let myChart = null; // グラフインスタンス保持用
+        let myChart = null; 
+        let savedPassword = ""; // パスワードを保持
 
         window.onload = () => {
             const now = new Date();
-            document.getElementById('month-picker').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+            // 現在の年月をセット
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            document.getElementById('month-picker').value = `${yyyy}-${mm}`;
         };
 
-        async function fetchData() {
+        // 初回ログイン
+        function initialLogin() {
             const pass = document.getElementById('password').value;
             if(!pass) return alert("パスワードを入力してください");
+            savedPassword = pass; // 保存
+            fetchData(true);
+        }
 
-            document.getElementById('loading').style.display = 'block';
+        // 更新ボタン用
+        function refreshData() {
+            if(!savedPassword) return alert("再ログインが必要です");
+            fetchData(false);
+        }
+
+        async function fetchData(isLogin) {
+            showToast("データ取得中...", true);
             
-            // ボタンを一時的に無効化（連打防止）
+            // ボタンを一時的に無効化
             const btns = document.querySelectorAll('button');
             btns.forEach(b => b.disabled = true);
 
             try {
-                const res = await fetch(GAS_URL, {
+                // キャッシュ防止のためにタイムスタンプをつける
+                const res = await fetch(GAS_URL + "?t=" + new Date().getTime(), {
                     method: 'POST',
-                    body: JSON.stringify({ action: 'getLogs', password: pass })
+                    body: JSON.stringify({ action: 'getLogs', password: savedPassword })
                 });
                 const json = await res.json();
 
                 if (json.error) {
                     alert("エラー: " + json.error);
                 } else {
+                    // データ整形
                     rawLogs = json.logs.slice(1).map(row => ({
                         time: new Date(row[0]),
                         name: row[1],
@@ -160,11 +181,12 @@
                     rawLogs.sort((a, b) => a.time - b.time);
                     
                     initDashboard();
+                    showToast("更新完了！");
                 }
             } catch (e) {
                 alert("通信エラー"); console.error(e);
+                showToast("更新失敗");
             } finally {
-                document.getElementById('loading').style.display = 'none';
                 btns.forEach(b => b.disabled = false);
             }
         }
@@ -178,6 +200,14 @@
             updateUserList();
             renderStatusBoard();
             renderReport();
+        }
+
+        // --- トースト通知 ---
+        function showToast(msg, keep=false) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            if(!keep) setTimeout(() => t.classList.remove('show'), 3000);
         }
 
         // --- 1. 在席ボード ---
@@ -210,7 +240,10 @@
                 opt.value = u; opt.innerText = u;
                 select.appendChild(opt);
             });
-            select.value = currentVal; // 選択状態を維持
+            // 以前の選択状態があれば維持、なければデフォルト
+            if(currentVal && currentVal !== 'all' && users.includes(currentVal)) {
+                select.value = currentVal;
+            }
         }
 
         // --- 3. レポート描画 ---
@@ -222,71 +255,76 @@
 
             if (!selectedMonth) return;
             const [year, month] = selectedMonth.split('-');
-            const filteredLogs = rawLogs.filter(l => l.time.getFullYear() == year && (l.time.getMonth()+1) == month);
+            // 年月の比較ロジック
+            const filteredLogs = rawLogs.filter(l => 
+                l.time.getFullYear() == year && 
+                (l.time.getMonth() + 1) == parseInt(month)
+            );
 
             if (filteredLogs.length === 0) {
-                container.innerHTML = "<p>データがありません</p>";
+                container.innerHTML = `<p style="text-align:center; color:#888;">${selectedMonth} のデータはありません</p>`;
                 chartWrapper.style.display = "none";
                 return;
             }
 
             if (selectedUser !== 'all') {
-                // 個人モード：グラフとテーブルを表示
+                // 個人モード
                 chartWrapper.style.display = "block";
                 const myLogs = filteredLogs.filter(l => l.name === selectedUser);
                 const dailyData = calcDailyWork(myLogs);
                 
-                drawChart(dailyData, selectedUser); // ★グラフ描画
-                renderPersonalTable(dailyData, selectedUser, container); // テーブル描画
+                drawChart(dailyData, selectedUser); // グラフ
+                renderPersonalTable(dailyData, selectedUser, container); // テーブル
             } else {
-                // 全員モード：テーブルのみ
+                // 全員モード
                 chartWrapper.style.display = "none";
                 renderAllTable(filteredLogs, container);
             }
         }
 
-        // 勤務時間計算ロジック
         function calcDailyWork(logs) {
             const daily = {};
-            // 日毎に初期化
             logs.forEach(l => {
                 const d = l.time.getDate();
-                if(!daily[d]) daily[d] = { date: l.time, start: null, end: null, ranges: [] };
+                if(!daily[d]) daily[d] = { date: l.time, start: null, end: null };
                 
-                // 簡易ロジック: その日の「最初の出勤」と「最後の退勤」
-                // ※ガントチャート用に開始/終了のペアも記録可能だが、今回はシンプルに
                 if(l.type === '出勤' && !daily[d].start) daily[d].start = l.time;
                 if(l.type === '退勤') daily[d].end = l.time;
             });
             return daily;
         }
 
-        // ★グラフ描画関数
+        // ★グラフ描画（修正版）
         function drawChart(dailyData, name) {
             const ctx = document.getElementById('workChart').getContext('2d');
-            
-            // 既存グラフがあれば破棄
             if (myChart) myChart.destroy();
 
-            // データ整形
-            const labels = [];
-            const dataStart = [];
-            const dataEnd = [];
-
-            // 1日〜31日までループ
             const days = Object.keys(dailyData).sort((a,b)=>Number(a)-Number(b));
-            
-            // Floating Bar用データ作成 [{x: 日付, y: [開始時, 終了時]}, ...]
             const plotData = [];
 
             days.forEach(day => {
                 const d = dailyData[day];
-                if (d.start && d.end) {
+                if (d.start) {
                     const startH = d.start.getHours() + d.start.getMinutes()/60;
-                    const endH = d.end.getHours() + d.end.getMinutes()/60;
+                    
+                    // ★重要修正：退勤データがない（勤務中）の場合は、現在時刻（またはグラフの端）までバーを伸ばす
+                    let endH;
+                    if (d.end) {
+                        endH = d.end.getHours() + d.end.getMinutes()/60;
+                    } else {
+                        // 今日なら「現在時刻」まで、過去ならとりあえず18時か24時まで伸ばして「勤務中？」とわかるようにする
+                        const now = new Date();
+                        if (d.start.getDate() === now.getDate()) {
+                             endH = now.getHours() + now.getMinutes()/60;
+                        } else {
+                             endH = startH + 1; // とりあえず1時間分だけ表示しておく（エラー処理）
+                        }
+                    }
+
                     plotData.push({
                         x: day + "日",
-                        y: [startH, endH]
+                        y: [startH, endH],
+                        status: d.end ? "完了" : "勤務中" // ツールチップ用
                     });
                 }
             });
@@ -298,9 +336,11 @@
                     datasets: [{
                         label: '勤務時間帯',
                         data: plotData,
-                        backgroundColor: 'rgba(39, 174, 96, 0.6)',
-                        borderColor: 'rgba(39, 174, 96, 1)',
-                        borderWidth: 1,
+                        backgroundColor: (ctx) => {
+                            // 勤務中は色を変える（赤っぽく）
+                            const raw = ctx.raw;
+                            return (raw && raw.status === "勤務中") ? 'rgba(231, 76, 60, 0.7)' : 'rgba(39, 174, 96, 0.6)';
+                        },
                         borderRadius: 4,
                         barPercentage: 0.6
                     }]
@@ -308,13 +348,9 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    indexAxis: 'y', // 横向きグラフ
+                    indexAxis: 'y',
                     scales: {
-                        x: {
-                            min: 0, max: 24,
-                            title: { display: true, text: '時刻 (0時 - 24時)' },
-                            ticks: { stepSize: 2 }
-                        }
+                        x: { min: 0, max: 24, title: { display: true, text: '時刻' } }
                     },
                     plugins: {
                         title: { display: true, text: `${name}さんの勤務グラフ` },
@@ -324,7 +360,8 @@
                                     const st = ctx.raw.y[0];
                                     const en = ctx.raw.y[1];
                                     const toTime = (h) => Math.floor(h) + ":" + Math.round((h%1)*60).toString().padStart(2,'0');
-                                    return `${toTime(st)} 〜 ${toTime(en)}`;
+                                    const status = ctx.raw.status;
+                                    return `${toTime(st)} 〜 ${toTime(en)} (${status})`;
                                 }
                             }
                         }
@@ -333,7 +370,6 @@
             });
         }
 
-        // 個人テーブル描画
         function renderPersonalTable(dailyData, name, container) {
             let html = `<h3>詳細データ</h3><table><thead><tr><th>日付</th><th>出勤</th><th>退勤</th><th>実働</th></tr></thead><tbody>`;
             let total = 0;
@@ -343,20 +379,21 @@
                 let s = "-", e = "-", dur = "-";
                 
                 if (d.start) s = formatTime(d.start);
-                if (d.end) e = formatTime(d.end);
-                
-                if (d.start && d.end) {
+                if (d.end) {
+                    e = formatTime(d.end);
                     const diff = (d.end - d.start) / (1000*60*60);
                     total += diff;
                     const h = Math.floor(diff);
                     const m = Math.round((diff-h)*60);
                     dur = `${h}時間 ${m}分`;
+                } else if (d.start) {
+                    e = "<span style='color:red'>勤務中</span>";
                 }
 
                 html += `<tr><td>${day}日</td><td>${s}</td><td>${e}</td><td>${dur}</td></tr>`;
             });
             
-            html += `<tr class="total-row"><td colspan="3">合計</td><td>${total.toFixed(1)} 時間</td></tr></tbody></table>`;
+            html += `<tr class="total-row"><td colspan="3">合計 (確定分のみ)</td><td>${total.toFixed(1)} 時間</td></tr></tbody></table>`;
             container.innerHTML = html;
         }
 
