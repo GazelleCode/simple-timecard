@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>勤怠管理ダッシュボード</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         :root {
             --primary: #2c3e50;
@@ -13,33 +14,22 @@
             --card-bg: #ffffff;
             --text: #333;
         }
-
         body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; }
-
-        /* ヘッダー */
         header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #ddd; }
         .header-left { display: flex; align-items: center; gap: 15px; }
         h1 { margin: 0; font-size: 1.5rem; color: var(--primary); }
-        
-        /* ボタン群 */
         .btn-group { display: flex; gap: 10px; }
         button { border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: 0.2s; color: white; display: flex; align-items: center; gap: 5px; }
         button:hover { opacity: 0.9; }
         button:disabled { background: #ccc !important; cursor: not-allowed; }
         .btn-refresh { background: var(--primary); }
         .btn-dl { background: #2980b9; }
-
-        /* ログインエリア */
         #login-area { background: var(--card-bg); padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; max-width: 400px; margin: 80px auto; }
         input, select { padding: 10px; font-size: 1rem; border: 1px solid #ccc; border-radius: 4px; margin: 5px 0; }
-        
-        /* ダッシュボード */
         #dashboard { display: none; }
         .section { background: var(--card-bg); border-radius: 8px; padding: 20px; margin-bottom: 30px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .section-header { font-size: 1.2rem; font-weight: bold; margin-bottom: 15px; border-left: 5px solid var(--primary); padding-left: 10px; display: flex; justify-content: space-between; align-items: center; }
-
-        /* 1. 在席ボード */
         .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
         .status-card { padding: 15px; border-radius: 8px; text-align: center; border: 2px solid #eee; background: #fafafa; }
         .status-card.active { background: #e8f5e9; border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 8px rgba(39, 174, 96, 0.2); }
@@ -47,21 +37,13 @@
         .status-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; background: #ccc; color: #666; }
         .status-card.active .status-badge { background: var(--accent); color: white; }
         .status-time { font-size: 0.8rem; color: #888; margin-top: 5px; }
-
-        /* 2. レポート */
         .filter-bar { display: flex; gap: 15px; align-items: center; background: #eee; padding: 10px 20px; border-radius: 8px; margin-bottom: 15px; flex-wrap: wrap; }
-        
-        /* グラフエリア */
-        .chart-container { height: 300px; margin-bottom: 20px; display: none; } /* 初期は非表示 */
-
-        /* テーブル */
+        .chart-container { height: 300px; margin-bottom: 20px; display: none; } 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95rem; }
         th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background: #f8f9fa; color: var(--primary); }
         tr:hover { background: #f1f1f1; }
         .total-row { font-weight: bold; background: #eef; }
-
-        /* 通知トースト */
         #toast { visibility: hidden; position: fixed; top: 20px; right: 20px; background: #333; color: white; padding: 15px 25px; border-radius: 8px; opacity: 0; transition: 0.3s; z-index: 100; font-weight: bold; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         #toast.show { visibility: visible; opacity: 1; top: 30px; }
     </style>
@@ -89,7 +71,6 @@
         </div>
 
         <div id="dashboard">
-            
             <div class="section">
                 <div class="section-header">
                     現在の出勤状況
@@ -100,7 +81,6 @@
 
             <div class="section">
                 <div class="section-header">月別・個人別レポート</div>
-                
                 <div class="filter-bar">
                     <div>
                         <label>対象月: </label>
@@ -113,42 +93,36 @@
                         </select>
                     </div>
                 </div>
-
                 <div id="chart-wrapper" class="chart-container">
                     <canvas id="workChart"></canvas>
                 </div>
-
                 <div id="report-container"></div>
             </div>
-
         </div>
     </div>
 
     <script>
-        // ★GASのWeb app URL（前と同じもの）
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbzhvm7kvgLWYsGFEBuTvyXSMC0PXM-X7RrYwL2Ta__JHU-EsGTldCr04ZnKPb6VFgzL/exec"; 
+        // ★GASのURLはそのまま
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbyDv4ESlQTkjdxXH0IhstdPqADHa36179GR3bE1W32YnaYFQkAdh5nvHmxf87-BbgXY/exec"; 
 
         let rawLogs = []; 
         let myChart = null; 
-        let savedPassword = ""; // パスワードを保持
+        let savedPassword = ""; 
 
         window.onload = () => {
             const now = new Date();
-            // 現在の年月をセット
             const yyyy = now.getFullYear();
             const mm = String(now.getMonth() + 1).padStart(2, '0');
             document.getElementById('month-picker').value = `${yyyy}-${mm}`;
         };
 
-        // 初回ログイン
         function initialLogin() {
             const pass = document.getElementById('password').value;
             if(!pass) return alert("パスワードを入力してください");
-            savedPassword = pass; // 保存
+            savedPassword = pass;
             fetchData(true);
         }
 
-        // 更新ボタン用
         function refreshData() {
             if(!savedPassword) return alert("再ログインが必要です");
             fetchData(false);
@@ -156,13 +130,10 @@
 
         async function fetchData(isLogin) {
             showToast("データ取得中...", true);
-            
-            // ボタンを一時的に無効化
             const btns = document.querySelectorAll('button');
             btns.forEach(b => b.disabled = true);
 
             try {
-                // キャッシュ防止のためにタイムスタンプをつける
                 const res = await fetch(GAS_URL + "?t=" + new Date().getTime(), {
                     method: 'POST',
                     body: JSON.stringify({ action: 'getLogs', password: savedPassword })
@@ -172,9 +143,9 @@
                 if (json.error) {
                     alert("エラー: " + json.error);
                 } else {
-                    // データ整形
+                    // ★ここが修正ポイント：日付変換ロジックを強化
                     rawLogs = json.logs.slice(1).map(row => ({
-                        time: new Date(row[0]),
+                        time: parseJPDate(row[0]), // 専用の変換関数を通す
                         name: row[1],
                         type: row[2]
                     }));
@@ -191,6 +162,26 @@
             }
         }
 
+        // ★新設：日本の日付形式 (DD/MM/YYYY) を正しく解釈する関数
+        function parseJPDate(dateStr) {
+            // 文字列じゃない（すでにDate型）ならそのまま返す
+            if (dateStr instanceof Date) return dateStr;
+
+            // "04/01/2026 14:24:03" のような形式かチェック
+            // 形式: 数字2桁/数字2桁/数字4桁 ...
+            const match = String(dateStr).match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(.*)$/);
+            
+            if (match) {
+                // match[1] = 04 (日), match[2] = 01 (月), match[3] = 2026 (年)
+                // JavaScript標準は MM/DD/YYYY なので順番を入れ替えて生成する
+                // "2026/01/04 14:24:03" として作り直す
+                return new Date(`${match[3]}/${match[2]}/${match[1]} ${match[4]}`);
+            }
+            
+            // それ以外の形式なら普通に変換
+            return new Date(dateStr);
+        }
+
         function initDashboard() {
             document.getElementById('login-area').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
@@ -202,7 +193,6 @@
             renderReport();
         }
 
-        // --- トースト通知 ---
         function showToast(msg, keep=false) {
             const t = document.getElementById('toast');
             t.innerText = msg;
@@ -210,7 +200,6 @@
             if(!keep) setTimeout(() => t.classList.remove('show'), 3000);
         }
 
-        // --- 1. 在席ボード ---
         function renderStatusBoard() {
             const userStatus = {}; 
             rawLogs.forEach(log => {
@@ -221,7 +210,7 @@
             Object.keys(userStatus).forEach(name => {
                 const s = userStatus[name];
                 const isWorking = (s.type === '出勤');
-                const timeStr = s.time.getHours().toString().padStart(2,'0') + ":" + s.time.getMinutes().toString().padStart(2,'0');
+                const timeStr = formatTime(s.time);
                 const div = document.createElement('div');
                 div.className = `status-card ${isWorking ? 'active' : ''}`;
                 div.innerHTML = `<div class="status-name">${name}</div><div class="status-badge">${isWorking ? '勤務中' : '退勤済'}</div><div class="status-time">Last: ${timeStr}</div>`;
@@ -229,7 +218,6 @@
             });
         }
 
-        // --- 2. リスト更新 ---
         function updateUserList() {
             const currentVal = document.getElementById('user-picker').value;
             const users = [...new Set(rawLogs.map(l => l.name))];
@@ -240,13 +228,11 @@
                 opt.value = u; opt.innerText = u;
                 select.appendChild(opt);
             });
-            // 以前の選択状態があれば維持、なければデフォルト
             if(currentVal && currentVal !== 'all' && users.includes(currentVal)) {
                 select.value = currentVal;
             }
         }
 
-        // --- 3. レポート描画 ---
         function renderReport() {
             const selectedMonth = document.getElementById('month-picker').value;
             const selectedUser = document.getElementById('user-picker').value;
@@ -255,7 +241,8 @@
 
             if (!selectedMonth) return;
             const [year, month] = selectedMonth.split('-');
-            // 年月の比較ロジック
+            
+            // 年月の比較
             const filteredLogs = rawLogs.filter(l => 
                 l.time.getFullYear() == year && 
                 (l.time.getMonth() + 1) == parseInt(month)
@@ -268,15 +255,12 @@
             }
 
             if (selectedUser !== 'all') {
-                // 個人モード
                 chartWrapper.style.display = "block";
                 const myLogs = filteredLogs.filter(l => l.name === selectedUser);
                 const dailyData = calcDailyWork(myLogs);
-                
-                drawChart(dailyData, selectedUser); // グラフ
-                renderPersonalTable(dailyData, selectedUser, container); // テーブル
+                drawChart(dailyData, selectedUser);
+                renderPersonalTable(dailyData, selectedUser, container);
             } else {
-                // 全員モード
                 chartWrapper.style.display = "none";
                 renderAllTable(filteredLogs, container);
             }
@@ -287,14 +271,12 @@
             logs.forEach(l => {
                 const d = l.time.getDate();
                 if(!daily[d]) daily[d] = { date: l.time, start: null, end: null };
-                
                 if(l.type === '出勤' && !daily[d].start) daily[d].start = l.time;
                 if(l.type === '退勤') daily[d].end = l.time;
             });
             return daily;
         }
 
-        // ★グラフ描画（修正版）
         function drawChart(dailyData, name) {
             const ctx = document.getElementById('workChart').getContext('2d');
             if (myChart) myChart.destroy();
@@ -306,25 +288,22 @@
                 const d = dailyData[day];
                 if (d.start) {
                     const startH = d.start.getHours() + d.start.getMinutes()/60;
-                    
-                    // ★重要修正：退勤データがない（勤務中）の場合は、現在時刻（またはグラフの端）までバーを伸ばす
                     let endH;
                     if (d.end) {
                         endH = d.end.getHours() + d.end.getMinutes()/60;
                     } else {
-                        // 今日なら「現在時刻」まで、過去ならとりあえず18時か24時まで伸ばして「勤務中？」とわかるようにする
+                        // 勤務中なら現在時刻まで伸ばす
                         const now = new Date();
                         if (d.start.getDate() === now.getDate()) {
                              endH = now.getHours() + now.getMinutes()/60;
                         } else {
-                             endH = startH + 1; // とりあえず1時間分だけ表示しておく（エラー処理）
+                             endH = startH + 1; 
                         }
                     }
-
                     plotData.push({
                         x: day + "日",
                         y: [startH, endH],
-                        status: d.end ? "完了" : "勤務中" // ツールチップ用
+                        status: d.end ? "完了" : "勤務中"
                     });
                 }
             });
@@ -337,7 +316,6 @@
                         label: '勤務時間帯',
                         data: plotData,
                         backgroundColor: (ctx) => {
-                            // 勤務中は色を変える（赤っぽく）
                             const raw = ctx.raw;
                             return (raw && raw.status === "勤務中") ? 'rgba(231, 76, 60, 0.7)' : 'rgba(39, 174, 96, 0.6)';
                         },
@@ -392,7 +370,6 @@
 
                 html += `<tr><td>${day}日</td><td>${s}</td><td>${e}</td><td>${dur}</td></tr>`;
             });
-            
             html += `<tr class="total-row"><td colspan="3">合計 (確定分のみ)</td><td>${total.toFixed(1)} 時間</td></tr></tbody></table>`;
             container.innerHTML = html;
         }
