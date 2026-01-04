@@ -277,6 +277,7 @@
             return daily;
         }
 
+        // ★グラフ描画（修正版：XとYを正しい向きに入れ替え）
         function drawChart(dailyData, name) {
             const ctx = document.getElementById('workChart').getContext('2d');
             if (myChart) myChart.destroy();
@@ -300,9 +301,11 @@
                              endH = startH + 1; 
                         }
                     }
+                    
+                    // 【修正ポイント】横向きグラフなので、Yが日付、Xが時間
                     plotData.push({
-                        x: day + "日",
-                        y: [startH, endH],
+                        y: day + "日",        // Y軸：日付
+                        x: [startH, endH],    // X軸：時間の範囲 [開始, 終了]
                         status: d.end ? "完了" : "勤務中"
                     });
                 }
@@ -311,7 +314,8 @@
             myChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: plotData.map(d => d.x),
+                    // ラベルもY軸(日付)に合わせる
+                    labels: plotData.map(d => d.y),
                     datasets: [{
                         label: '勤務時間帯',
                         data: plotData,
@@ -326,17 +330,22 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    indexAxis: 'y',
+                    indexAxis: 'y', // 横向き指定
                     scales: {
-                        x: { min: 0, max: 24, title: { display: true, text: '時刻' } }
+                        x: { 
+                            min: 0, 
+                            max: 24, 
+                            title: { display: true, text: '時刻 (0時 - 24時)' } 
+                        }
                     },
                     plugins: {
                         title: { display: true, text: `${name}さんの勤務グラフ` },
                         tooltip: {
                             callbacks: {
                                 label: function(ctx) {
-                                    const st = ctx.raw.y[0];
-                                    const en = ctx.raw.y[1];
+                                    // ツールチップのデータ取得元も x と y を合わせる
+                                    const st = ctx.raw.x[0]; // ここも x を参照
+                                    const en = ctx.raw.x[1]; // ここも x を参照
                                     const toTime = (h) => Math.floor(h) + ":" + Math.round((h%1)*60).toString().padStart(2,'0');
                                     const status = ctx.raw.status;
                                     return `${toTime(st)} 〜 ${toTime(en)} (${status})`;
@@ -347,7 +356,7 @@
                 }
             });
         }
-
+        
         function renderPersonalTable(dailyData, name, container) {
             let html = `<h3>詳細データ</h3><table><thead><tr><th>日付</th><th>出勤</th><th>退勤</th><th>実働</th></tr></thead><tbody>`;
             let total = 0;
