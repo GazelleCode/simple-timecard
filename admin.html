@@ -411,38 +411,74 @@
             });
         }
         
+        // ★詳細テーブル描画（休憩対応版）
         function renderPersonalTable(dailyData, name, container) {
-            let html = `<h3>詳細データ</h3><table><thead><tr><th>日付</th><th>出勤</th><th>退勤</th><th>実働</th></tr></thead><tbody>`;
-            let total = 0;
+            let html = `<h3>詳細データ</h3><table><thead><tr><th>日付</th><th>出勤</th><th>退勤</th><th>休憩</th><th>実働</th></tr></thead><tbody>`;
+            let totalWork = 0;
             
             Object.keys(dailyData).sort((a,b)=>Number(a)-Number(b)).forEach(day => {
-                const d = dailyData[day];
-                let s = "-", e = "-", dur = "-";
+                const segments = dailyData[day].segments || [];
                 
-                if (d.start) s = formatTime(d.start);
-                if (d.end) {
-                    e = formatTime(d.end);
-                    const diff = (d.end - d.start) / (1000*60*60);
-                    total += diff;
-                    const h = Math.floor(diff);
-                    const m = Math.round((diff-h)*60);
-                    dur = `${h}時間 ${m}分`;
-                } else if (d.start) {
-                    e = "<span style='color:red'>勤務中</span>";
+                // 1日の集計
+                let startTime = "-";
+                let endTime = "-";
+                let restMinutes = 0;
+                let workMinutes = 0;
+
+                // 最初の出勤時間を探す
+                const firstWork = segments.find(s => s.type === 'work');
+                if (firstWork) startTime = formatTime(firstWork.start);
+
+                // 最後の退勤時間を探す（または現在進行系）
+                // segmentsは時系列順なので、最後の要素を見ればいい
+                const lastSeg = segments[segments.length - 1];
+                if (lastSeg) {
+                    if (lastSeg.end) {
+                        // 完全に終わっている場合
+                        if (lastSeg.type === 'work') endTime = formatTime(lastSeg.end);
+                        // もし最後が休憩なら、その前の仕事終わりを退勤とするかは運用次第だが、
+                        // ここでは「最後のログの時間」を退勤とする
+                        else endTime = formatTime(lastSeg.end); 
+                    } else {
+                        // 進行中の場合
+                        endTime = "<span style='color:red'>勤務中</span>";
+                    }
                 }
 
-                html += `<tr><td>${day}日</td><td>${s}</td><td>${e}</td><td>${dur}</td></tr>`;
-            });
-            html += `<tr class="total-row"><td colspan="3">合計 (確定分のみ)</td><td>${total.toFixed(1)} 時間</td></tr></tbody></table>`;
-            container.innerHTML = html;
-        }
+                // 実働と休憩の合計時間を計算
+                segments.forEach(seg => {
+                    const end = seg.end || new Date(); // 進行中なら現在時刻で計算
+                    const diffMins = (end - seg.start) / (1000 * 60); // 分換算
 
-        function renderAllTable(logs, container) {
-            let html = `<table><thead><tr><th>日時</th><th>氏名</th><th>種別</th></tr></thead><tbody>`;
-            logs.forEach(l => {
-                html += `<tr><td>${l.time.toLocaleString()}</td><td>${l.name}</td><td>${l.type}</td></tr>`;
+                    if (seg.type === 'work') {
+                        workMinutes += diffMins;
+                    } else {
+                        restMinutes += diffMins;
+                    }
+                });
+
+                // 表示用フォーマット
+                const workH = Math.floor(workMinutes / 60);
+                const workM = Math.floor(workMinutes % 60);
+                const restH = Math.floor(restMinutes / 60);
+                const restM = Math.floor(restMinutes % 60);
+
+                totalWork += workMinutes;
+
+                html += `<tr>
+                    <td>${day}日</td>
+                    <td>${startTime}</td>
+                    <td>${endTime}</td>
+                    <td>${restH}時間 ${restM}分</td>
+                    <td>${workH}時間 ${workM}分</td>
+                </tr>`;
             });
-            html += "</tbody></table>";
+
+            // 月間合計
+            const totalH = Math.floor(totalWork / 60);
+            const totalM = Math.floor(totalWork % 60);
+
+            html += `<tr class="total-row"><td colspan="4">合計 (実働のみ)</td><td>${totalH}時間 ${totalM}分</td></tr></tbody></table>`;
             container.innerHTML = html;
         }
 
