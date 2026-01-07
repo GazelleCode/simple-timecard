@@ -266,18 +266,67 @@
             }
         }
 
+        // ログを解析して、1日ごとの「勤務区間」と「休憩区間」のリストを作る
         function calcDailyWork(logs) {
             const daily = {};
+            
+            // まず日付ごとにログをまとめる
             logs.forEach(l => {
                 const d = l.time.getDate();
-                if(!daily[d]) daily[d] = { date: l.time, start: null, end: null };
-                if(l.type === '出勤' && !daily[d].start) daily[d].start = l.time;
-                if(l.type === '退勤') daily[d].end = l.time;
+                if(!daily[d]) daily[d] = { date: l.time, logs: [] };
+                daily[d].logs.push(l);
             });
+
+            // 日ごとにタイムラインを作成
+            Object.keys(daily).forEach(d => {
+                const dayLogs = daily[d].logs;
+                // 時系列順に保証
+                dayLogs.sort((a,b) => a.time - b.time);
+
+                const segments = []; // { type: 'work'|'rest', start: Date, end: Date|null }
+                let currentStart = null;
+                let lastType = null; // 'work' or 'rest'
+
+                dayLogs.forEach(log => {
+                    // 出勤 or 休憩戻り → 仕事開始
+                    if (log.type === '出勤' || log.type === '休憩戻り') {
+                        // もし前の区間が閉じてなければ閉じる（休憩中のまま出勤ボタン押した等のイレギュラー対応）
+                        if (currentStart && lastType === 'rest') {
+                             segments.push({ type: 'rest', start: currentStart, end: log.time });
+                        }
+                        currentStart = log.time;
+                        lastType = 'work';
+                    }
+                    // 休憩入り → 仕事終了＆休憩開始
+                    else if (log.type === '休憩入り') {
+                        if (currentStart && lastType === 'work') {
+                            segments.push({ type: 'work', start: currentStart, end: log.time });
+                        }
+                        currentStart = log.time;
+                        lastType = 'rest';
+                    }
+                    // 退勤 → 仕事終了
+                    else if (log.type === '退勤') {
+                        if (currentStart) {
+                            segments.push({ type: lastType, start: currentStart, end: log.time });
+                        }
+                        currentStart = null;
+                        lastType = null;
+                    }
+                });
+
+                // まだ終わっていない（勤務中 or 休憩中）の場合
+                if (currentStart) {
+                    segments.push({ type: lastType, start: currentStart, end: null }); // end: null は「現在進行形」
+                }
+
+                daily[d].segments = segments;
+            });
+
             return daily;
         }
 
-        // ★グラフ描画（修正版：XとYを正しい向きに入れ替え）
+        // ★グラフ描画（休憩の色分け対応版）
         function drawChart(dailyData, name) {
             const ctx = document.getElementById('workChart').getContext('2d');
             if (myChart) myChart.destroy();
@@ -286,42 +335,53 @@
             const plotData = [];
 
             days.forEach(day => {
-                const d = dailyData[day];
-                if (d.start) {
-                    const startH = d.start.getHours() + d.start.getMinutes()/60;
+                const segments = dailyData[day].segments || [];
+                
+                segments.forEach(seg => {
+                    const startH = seg.start.getHours() + seg.start.getMinutes()/60;
                     let endH;
-                    if (d.end) {
-                        endH = d.end.getHours() + d.end.getMinutes()/60;
+                    
+                    if (seg.end) {
+                        endH = seg.end.getHours() + seg.end.getMinutes()/60;
                     } else {
-                        // 勤務中なら現在時刻まで伸ばす
+                        // 現在進行形なら、現在時刻まで伸ばす
                         const now = new Date();
-                        if (d.start.getDate() === now.getDate()) {
-                             endH = now.getHours() + now.getMinutes()/60;
+                        // 今日の日付なら現在時刻、過去なら24時まで伸ばしておく等の処理
+                        if (seg.start.getDate() === now.getDate()) {
+                            endH = now.getHours() + now.getMinutes()/60;
                         } else {
-                             endH = startH + 1; 
+                            endH = startH + 1; // 過去のデータで退勤忘れなら1時間だけ表示（仮）
                         }
                     }
-                    
-                    // 【修正ポイント】横向きグラフなので、Yが日付、Xが時間
+
                     plotData.push({
-                        y: day + "日",        // Y軸：日付
-                        x: [startH, endH],    // X軸：時間の範囲 [開始, 終了]
-                        status: d.end ? "完了" : "勤務中"
+                        y: day + "日",
+                        x: [startH, endH],
+                        status: seg.type === 'work' ? "勤務" : "休憩",
+                        ongoing: !seg.end // 進行中フラグ
                     });
-                }
+                });
             });
 
             myChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    // ラベルもY軸(日付)に合わせる
-                    labels: plotData.map(d => d.y),
+                    labels: [...new Set(plotData.map(d => d.y))], // 重複排除した日付リスト
                     datasets: [{
-                        label: '勤務時間帯',
+                        label: 'タイムライン',
                         data: plotData,
+                        // ★ここで色を変える
                         backgroundColor: (ctx) => {
                             const raw = ctx.raw;
-                            return (raw && raw.status === "勤務中") ? 'rgba(231, 76, 60, 0.7)' : 'rgba(39, 174, 96, 0.6)';
+                            if (!raw) return '#ccc';
+                            
+                            if (raw.status === '休憩') {
+                                return 'rgba(255, 159, 64, 0.8)'; // オレンジ（休憩）
+                            }
+                            if (raw.ongoing) {
+                                return 'rgba(231, 76, 60, 0.8)'; // 赤（現在勤務中）
+                            }
+                            return 'rgba(39, 174, 96, 0.7)'; // 緑（完了した勤務）
                         },
                         borderRadius: 4,
                         barPercentage: 0.6
@@ -330,25 +390,19 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    indexAxis: 'y', // 横向き指定
+                    indexAxis: 'y',
                     scales: {
-                        x: { 
-                            min: 0, 
-                            max: 24, 
-                            title: { display: true, text: '時刻 (0時 - 24時)' } 
-                        }
+                        x: { min: 0, max: 24, title: { display: true, text: '時刻' } }
                     },
                     plugins: {
-                        title: { display: true, text: `${name}さんの勤務グラフ` },
+                        title: { display: true, text: `${name}さんの詳細タイムライン` },
                         tooltip: {
                             callbacks: {
                                 label: function(ctx) {
-                                    // ツールチップのデータ取得元も x と y を合わせる
-                                    const st = ctx.raw.x[0]; // ここも x を参照
-                                    const en = ctx.raw.x[1]; // ここも x を参照
+                                    const st = ctx.raw.x[0];
+                                    const en = ctx.raw.x[1];
                                     const toTime = (h) => Math.floor(h) + ":" + Math.round((h%1)*60).toString().padStart(2,'0');
-                                    const status = ctx.raw.status;
-                                    return `${toTime(st)} 〜 ${toTime(en)} (${status})`;
+                                    return `${ctx.raw.status}: ${toTime(st)} 〜 ${toTime(en)}`;
                                 }
                             }
                         }
