@@ -118,24 +118,8 @@
     </div>
 
     <script>
-        // ★重要: あなたのGASのURLがここに入っているか確認してください
-        // ★URLの「?api=...」という部分からGASのURLを取得する
-        const urlParams = new URLSearchParams(window.location.search);
-        let GAS_URL = urlParams.get('api');
-        
-        // もしURLに入っていなかったら（管理者がテストする時など）、ローカル保存またはデフォルトを使う
-        if (!GAS_URL) {
-            GAS_URL = localStorage.getItem('timecard_api_url'); // 一度読み込んだら保存しておく
-        }
-        
-        // それでもなければエラーではなく、設定画面へ誘導するなどの処理（今回は簡易的にアラート）
-        if (!GAS_URL) {
-            // 動作確認用のデフォルトURL（あなたの開発用）を入れておくのも手です
-            GAS_URL = "https://script.google.com/macros/s/AKfycbyDv4ESlQTkjdxXH0IhstdPqADHa36179GR3bE1W32YnaYFQkAdh5nvHmxf87-BbgXY/exec";
-        } else {
-            // 次回からQRコードなしでも開けるように保存しておく
-            localStorage.setItem('timecard_api_url', GAS_URL);
-        }
+        // ★重要: ここに後で作成するGASのURLを貼る
+const GAS_URL = "https://script.google.com/macros/s/AKfycbzhvm7kvgLWYsGFEBuTvyXSMC0PXM-X7RrYwL2Ta__JHU-EsGTldCr04ZnKPb6VFgzL/exec";
 
         // --- 1. 時計機能 ---
         setInterval(() => {
